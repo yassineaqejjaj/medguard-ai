@@ -1,5 +1,7 @@
 # MedGuard AI
 
+[![CI](https://github.com/yassineaqejjaj/medguard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/yassineaqejjaj/medguard-ai/actions/workflows/ci.yml)
+
 **Trust every AI decision. Prove every result.**
 
 An open-source *AI assurance platform for healthcare*. MedGuard connects the AI applications a health-tech team builds (assistants and
@@ -178,7 +180,7 @@ This is an MVP intended for health-tech pilots, not a finished product. Stated p
 | GPU path (vLLM) | Configured in Compose, never exercised here |
 | Podman | Compose file and scripts support it; only Docker was used during development |
 | Consistency across rephrasings | Declared as a criterion, not yet a multi-prompt check |
-| GitLab CI | Written (`.gitlab-ci.yml`), not run on a GitLab instance; the GitHub Actions workflow is the one exercised |
+| CI | GitHub Actions runs the API tests (including the PDF test), the web checks and the licence policy: green. `.gitlab-ci.yml` is written for self-hosted GitLab CE but has not been run on a GitLab instance |
 | Evidence restore | Database restore rehearsed; evidence archive restore not rehearsed |
 | Production readiness | See the hardening checklist in [docs/deployment.md](docs/deployment.md) |
 
