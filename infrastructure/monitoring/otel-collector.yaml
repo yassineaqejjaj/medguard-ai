@@ -1,0 +1,15 @@
+# Minimal collector: receives OTLP from the API and prints spans to its log.
+# Replace the debug exporter with Tempo/Jaeger (both Apache-2.0) for real storage.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  debug:
+    verbosity: basic
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug]

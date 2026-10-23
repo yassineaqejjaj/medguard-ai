@@ -1,0 +1,13 @@
+{$MEDGUARD_PUBLIC_ADDR:localhost:8443} {
+	{$MEDGUARD_TLS_DIRECTIVE:tls internal}
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /healthz {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

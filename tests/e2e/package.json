@@ -1,0 +1,13 @@
+{
+  "name": "medguard-e2e",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "playwright test",
+    "screenshots": "playwright test screenshots.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0"
+  }
+}

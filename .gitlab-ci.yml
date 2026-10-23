@@ -1,0 +1,58 @@
+# GitLab CI (self-hosted GitLab Community Edition). Runners need Docker or Podman for the image and e2e jobs.
+stages: [lint, test, build, gate]
+
+variables:
+  POSTGRES_USER: medguard
+  POSTGRES_PASSWORD: medguard
+  POSTGRES_DB: medguard
+
+api-tests:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  services:
+    - name: postgres:17-alpine
+      alias: pg
+  variables:
+    MEDGUARD_TEST_OWNER_URL: postgresql+asyncpg://medguard:medguard@pg:5432/medguard
+    MEDGUARD_TEST_APP_URL: postgresql+asyncpg://medguard_app:medguard_app@pg:5432/medguard
+  script:
+    - cd apps/api
+    - apt-get update -qq && apt-get install -y -qq libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core
+    - uv sync --frozen
+    - uv run pytest -q
+
+web:
+  stage: test
+  image: node:22-alpine
+  script:
+    - corepack enable
+    - cd apps/web && pnpm install --frozen-lockfile
+    - pnpm lint && pnpm test && pnpm build
+
+licenses:
+  stage: lint
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  before_script: [apt-get update -qq && apt-get install -y -qq nodejs npm && npm i -g pnpm]
+  script:
+    - (cd apps/api && uv sync --frozen)
+    - (cd apps/web && pnpm install --frozen-lockfile)
+    - python3 scripts/check_licenses.py
+
+images:
+  stage: build
+  image: quay.io/podman/stable
+  script:
+    - podman build -t medguard-api apps/api
+    - podman build -t medguard-web apps/web
+    - podman build -t medguard-demo-assistant apps/demo-assistant
+
+# Example of the release gate in a pipeline: blocks a deploy unless MedGuard says PASS.
+# Requires CI variables MEDGUARD_URL and MEDGUARD_TOKEN (a gate:read token created in Settings).
+release-gate:
+  stage: gate
+  image: alpine:3.20
+  before_script: [apk add --no-cache bash curl python3]
+  script:
+    - MEDGUARD_TOKEN="$MEDGUARD_TOKEN" scripts/medguard-gate.sh --url "$MEDGUARD_URL" --system "$APP_NAME" --version "$CI_COMMIT_TAG"
+  rules:
+    - if: $CI_COMMIT_TAG && $MEDGUARD_URL

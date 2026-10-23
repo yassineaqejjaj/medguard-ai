@@ -1,0 +1,157 @@
+# Works with `podman compose` and `docker compose`. Images are OCI.
+name: medguard
+
+x-api-env: &api-env
+  MEDGUARD_DATABASE_URL: postgresql+asyncpg://medguard_app:${MEDGUARD_APP_DB_PASSWORD:?set in .env}@postgres:5432/medguard
+  MEDGUARD_VALKEY_URL: redis://valkey:6379/0
+  MEDGUARD_OIDC_ISSUER: http://localhost:8080/realms/medguard
+  MEDGUARD_OIDC_JWKS_URL: http://keycloak:8080/realms/medguard/protocol/openid-connect/certs
+  MEDGUARD_SECRET_KEY_B64: ${MEDGUARD_SECRET_KEY_B64:?set in .env}
+  MEDGUARD_S3_ENDPOINT: http://seaweedfs:8333
+  MEDGUARD_S3_ACCESS_KEY: ${SEAWEED_S3_ACCESS_KEY:?set in .env}
+  MEDGUARD_S3_SECRET_KEY: ${SEAWEED_S3_SECRET_KEY:?set in .env}
+
+services:
+  postgres:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: medguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: medguard
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medguard"]
+      interval: 5s
+      retries: 20
+
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    volumes: [valkeydata:/data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  seaweedfs:
+    image: docker.io/chrislusf/seaweedfs:3.80
+    # Credentials come from .env: the S3 identity file is written at start-up so no secret lives in the repository.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /tmp/s3.json <<EOF
+        {"identities":[{"name":"medguard","credentials":[{"accessKey":"$$S3_ACCESS_KEY","secretKey":"$$S3_SECRET_KEY"}],"actions":["Admin","Read","Write","List"]}]}
+        EOF
+        exec weed server -s3 -s3.config=/tmp/s3.json -dir=/data -ip.bind=0.0.0.0
+    environment:
+      S3_ACCESS_KEY: ${SEAWEED_S3_ACCESS_KEY:?set in .env}
+      S3_SECRET_KEY: ${SEAWEED_S3_SECRET_KEY:?set in .env}
+    volumes: [seaweeddata:/data]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set in .env}
+      KC_HOSTNAME: http://localhost:8080
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./infrastructure/compose/keycloak/medguard-realm.json:/opt/keycloak/data/import/medguard-realm.json:ro
+    ports: ["8080:8080"]
+
+  migrate:
+    build: ./apps/api
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m medguard_api.bootstrap 'demo-org:Demo Organisation' 'other-org:Other Organisation'"
+    environment:
+      MEDGUARD_MIGRATION_URL: postgresql+asyncpg://medguard:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/medguard
+      MEDGUARD_APP_DB_PASSWORD: ${MEDGUARD_APP_DB_PASSWORD:?set in .env}
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  api:
+    build: ./apps/api
+    environment:
+      <<: *api-env
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      valkey: {condition: service_healthy}
+
+  worker:
+    build: ./apps/api
+    command: ["celery", "-A", "medguard_api.worker", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      <<: *api-env
+      # The demo assistants live on the compose network (private addresses). Keep this false in production.
+      MEDGUARD_ALLOW_PRIVATE_TARGETS: ${MEDGUARD_ALLOW_PRIVATE_TARGETS:-true}
+      MEDGUARD_JUDGE_URL: ${MEDGUARD_JUDGE_URL:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      MEDGUARD_JUDGE_MODEL: ${MEDGUARD_JUDGE_MODEL:-Qwen/Qwen3-8B}
+      MEDGUARD_JUDGE_MODEL_DIGEST: ${MEDGUARD_JUDGE_MODEL_DIGEST:-}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      valkey: {condition: service_healthy}
+
+  demo-assistant-v1:
+    build: ./apps/demo-assistant
+    environment: {DEMO_VERSION: v1}
+    profiles: ["demo"]
+
+  demo-assistant-v2:
+    build: ./apps/demo-assistant
+    environment: {DEMO_VERSION: v2}
+    profiles: ["demo"]
+
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.1
+    volumes: [./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
+    ports: ["127.0.0.1:9090:9090"]
+    profiles: ["monitoring"]
+
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector:0.114.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes: [./infrastructure/monitoring/otel-collector.yaml:/etc/otel/config.yaml:ro]
+    profiles: ["monitoring"]
+
+  # --- Judge model server (Qwen3-8B, Apache-2.0). Run `scripts/fetch-models.sh` first. -------------
+  llm-cpu:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: ["-m", "/models/Qwen3-8B-Q4_K_M.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "8192",
+              "--alias", "Qwen/Qwen3-8B", "--seed", "42", "-t", "${LLM_CPU_THREADS:-8}"]
+    volumes: [./models:/models:ro]
+    profiles: ["cpu"]
+
+  llm-gpu:
+    image: ${VLLM_IMAGE:-docker.io/vllm/vllm-openai:latest}
+    command: ["--model", "Qwen/Qwen3-8B", "--served-model-name", "Qwen/Qwen3-8B", "--port", "8080", "--seed", "42", "--max-model-len", "8192"]
+    volumes: [./models/hf-cache:/root/.cache/huggingface]
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    profiles: ["gpu"]
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_OIDC_AUTHORITY: http://localhost:8080/realms/medguard
+        NEXT_PUBLIC_OIDC_CLIENT_ID: medguard-web
+    depends_on: [api]
+
+  caddy:
+    image: docker.io/library/caddy:2-alpine
+    environment:
+      MEDGUARD_PUBLIC_ADDR: ${MEDGUARD_PUBLIC_ADDR:-localhost:8443}
+      MEDGUARD_TLS_DIRECTIVE: ${MEDGUARD_TLS_DIRECTIVE:-tls internal}
+    volumes:
+      - ./infrastructure/compose/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    ports: ["8443:8443"]
+    depends_on: [api, web]
+
+volumes: {pgdata: {}, valkeydata: {}, seaweeddata: {}, caddydata: {}}

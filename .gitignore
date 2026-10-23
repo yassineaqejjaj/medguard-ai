@@ -1,0 +1,12 @@
+.DS_Store
+.env
+.next
+.pytest_cache
+.venv
+__pycache__
+backups/
+models/*.gguf
+node_modules
+tests/e2e/node_modules
+tests/e2e/playwright-report
+tests/e2e/test-results
