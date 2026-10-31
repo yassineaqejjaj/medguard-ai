@@ -15,6 +15,18 @@ evidence of every decision.
 
 ![Overview](docs/screenshots/01-overview.png)
 
+## At a glance
+
+| | |
+|---|---|
+| **What it is** | An open-source AI assurance platform for healthcare: it tests AI applications on synthetic scenarios, routes doubtful results to human reviewers, gates releases and keeps the evidence. |
+| **Who it is for** | Health-tech teams building assistants and RAG systems (document search, drafting, administrative help), with qualified human reviewers involved. |
+| **Problem it addresses** | A quality score can be mistaken for safety; MedGuard checks critical failures independently of averages and keeps a human in the release decision (see [Trust model](#trust-model-what-keeps-a-score-from-being-mistaken-for-safety)). |
+| **Status** | **Prototype** (MVP intended for health-tech pilots, not a finished product). Synthetic data only. See [Project status and limits](#project-status-and-limits). |
+| **Main limits** | No medical or regulatory certification; the real Qwen3-8B judge has not been run in this repository's test environment; GPU and Podman paths not exercised. |
+| **Roadmap** | Not yet documented. |
+| **Licence** | [Apache-2.0](LICENSE) |
+
 ## Contents
 
 - [What it does](#what-it-does) · [See it work](#see-it-work) · [Quick start](#quick-start)
