@@ -193,3 +193,11 @@ This is an MVP intended for health-tech pilots, not a finished product. Stated p
 ## Licence
 
 [Apache License 2.0](LICENSE). Third-party components keep their own licences, listed in [docs/licenses.md](docs/licenses.md).
+
+---
+
+## Part of an engineering approach
+
+Built with the [Agentic SDLC framework](https://github.com/yassineaqejjaj/agentic-sdlc) (earned autonomy). Read how this project was built and what its checks caught in the [case study](https://github.com/yassineaqejjaj/agentic-sdlc/blob/main/docs/case-studies/medguard-ai.md).
+
+Companion to the book [Leading with AI: A Blueprint for AI-Enhanced Healthcare](https://www.amazon.fr/dp/B0CVB848M6).
