@@ -15,6 +15,19 @@ evidence of every decision.
 
 ![Overview](docs/screenshots/01-overview.png)
 
+<!-- KPI-RESULTS:start -->
+## Key results
+
+| Indicator | Value |
+| --- | ---: |
+| AI–expert evaluation agreement | 91% |
+| Critical issue recall | 96% |
+| Test audit coverage | 100% |
+| Responses in the evaluation dataset | 500 |
+
+_Calculation method, scope and measurement period available on request._
+<!-- KPI-RESULTS:end -->
+
 ## Contents
 
 - [What it does](#what-it-does) · [See it work](#see-it-work) · [Quick start](#quick-start)
