@@ -12,16 +12,23 @@
 
 ## 2. Component diagram
 
-```text
-                    ┌───────────────────────────── Caddy (TLS, reverse proxy) ───────────────────────────┐
-                    │                                                                                    │
- Browser ──► web (Next.js) ──REST/JSON──► api (FastAPI) ──► PostgreSQL (RLS, tenant isolation)           │
-     │                                       │  │  └──────► SeaweedFS (S3 API): evidence, reports         │
-     │  OIDC (PKCE)                          │  └─ enqueue ► Valkey ◄── Celery workers                    │
-     └──────────► Keycloak ◄── JWKS ─────────┘                         │   │                              │
-                                                                       │   ├─► Target AI app (HTTP adapter, SSRF-guarded)
-                                                                       │   └─► Judge LLM: vLLM (GPU) | llama.cpp (CPU)  — Qwen3-8B
- OpenTelemetry SDK (api, workers) ─► OTel Collector ─► Prometheus
+```mermaid
+flowchart LR
+    browser["Browser"] --> caddy["Caddy · TLS / reverse proxy"]
+    caddy --> web["Web · Next.js"]
+    web -->|"REST / JSON"| caddy
+    caddy --> api["API · FastAPI"]
+    browser -->|"OIDC / PKCE"| keycloak["Keycloak"]
+    api -->|"JWKS"| keycloak
+    api --> pg[("PostgreSQL · RLS / tenant isolation")]
+    api --> s3["SeaweedFS · S3 evidence and reports"]
+    api -->|"Enqueue"| valkey[("Valkey")]
+    worker["Celery workers"] <--> valkey
+    worker --> target["Target AI app · HTTP adapter / SSRF guard"]
+    worker --> llm["Judge LLM · Qwen3-8B / vLLM GPU or llama.cpp CPU"]
+    api -.-> otel["OpenTelemetry SDK"]
+    worker -.-> otel
+    otel --> collector["OTel Collector"] --> prometheus["Prometheus"]
 ```
 
 Deployment units (compose): `caddy`, `web`, `api`, `worker`, `postgres`, `valkey`, `seaweedfs`, `keycloak`, `llm` (profile `gpu` = vLLM, profile `cpu` = llama.cpp), `otel-collector`, `prometheus`.
@@ -127,3 +134,4 @@ Points that need attention (verified at build time, not assumed):
 - CPU inference of a quantised Qwen3-8B is slow; see [deployment.md](deployment.md).
 - The GPU (vLLM) path is configured but has not been exercised in the development environment.
 - One organisation per Keycloak user (claim `org`). No self-service organisation management UI.
+
