@@ -1,5 +1,7 @@
 # MedGuard AI
 
+![IASEEN Constellation — medguard-ai](docs/assets/github-cover.svg)
+
 [![CI](https://github.com/yassineaqejjaj/medguard-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/yassineaqejjaj/medguard-ai/actions/workflows/ci.yml)
 
 **Trust every AI decision. Prove every result.**
